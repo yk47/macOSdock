@@ -12,22 +12,22 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       home: Scaffold(
-        backgroundColor: Colors.grey[800],
+        backgroundColor: Colors.grey[600],
         body: Stack(
           children: [
-            // Background image
             Positioned.fill(
+              // Background Image
               child: Image.network(
                 'https://res.cloudinary.com/dprkiyc1j/image/upload/v1731151515/macimage_era5dl.jpg',
                 fit: BoxFit.cover,
               ),
             ),
-            // Dock menu at the bottom
             Align(
               alignment: Alignment.bottomCenter,
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 20),
                 child: Dock(
+                  //Icons Images
                   items: const [
                     'https://res.cloudinary.com/dprkiyc1j/image/upload/v1731135122/3d-mac-os-finder_nfxqni.png',
                     'https://res.cloudinary.com/dprkiyc1j/image/upload/v1731137370/macMonitor_zqiv68.png',
@@ -76,15 +76,33 @@ class Dock<T> extends StatefulWidget {
   State<Dock<T>> createState() => _DockState<T>();
 }
 
-class _DockState<T> extends State<Dock<T>> {
+class _DockState<T> extends State<Dock<T>> with SingleTickerProviderStateMixin {
   late List<T> _items;
   int? _hoveringIndex;
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
 
   @override
   void initState() {
     super.initState();
     _items = List.from(widget.items);
     _hoveringIndex = null;
+
+    /// Using AnimationController for sliding icons animation
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
@@ -108,52 +126,86 @@ class _DockState<T> extends State<Dock<T>> {
   }
 
   Widget _buildDraggableItem(int index) {
-    return LongPressDraggable<int>(
-      data: index,
-      feedback: Material(
-        color: Colors.transparent,
-        child: widget.builder(_items[index]),
-      ),
-      childWhenDragging: const SizedBox.shrink(),
-      child: DragTarget<int>(
-        onAcceptWithDetails: (details) {
-          setState(() {
-            final oldIndex = details.data;
-            final item = _items.removeAt(oldIndex);
-            _items.insert(index, item);
-            _hoveringIndex = null;
-          });
-        },
-        onWillAcceptWithDetails: (details) {
-          setState(() {
-            _hoveringIndex = index;
-          });
-          return true;
-        },
-        onLeave: (_) {
-          setState(() {
-            _hoveringIndex = null;
-          });
-        },
-        builder: (context, candidateData, rejectedData) {
-          // Apply padding only between adjacent items when hovering
-          final double leftPadding =
-              (_hoveringIndex != null && _hoveringIndex == index - 1)
-                  ? 12.0
-                  : 0.0;
-          final double rightPadding =
-              (_hoveringIndex != null && _hoveringIndex == index + 1)
-                  ? 12.0
-                  : 0.0;
+    return GestureDetector(
+      /// Using GestureDetector
+      /// when we just click on the icon nothing will happen,
+      /// when we drag the icon it will start anumation.
+      onTap: () {
+        _controller.forward();
 
-          return AnimatedPadding(
-            padding: EdgeInsets.only(right: rightPadding, left: leftPadding),
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeInOut,
-            child: widget.builder(_items[index]),
-          );
+        _startDrag(index);
+      },
+      child: Draggable<int>(
+        data: index,
+        onDragStarted: () {
+          _controller.forward();
         },
+        onDragEnd: (_) {
+          _controller.reverse();
+        },
+        feedback: ScaleTransition(
+          scale: _scaleAnimation,
+          child: Material(
+            color: Colors.transparent,
+            child: widget.builder(_items[index]),
+          ),
+        ),
+        // Icon out Dock size shrink.
+        childWhenDragging: const SizedBox.shrink(),
+        // when drag complete or cancle hoveringIndex Value Set to null
+        onDragCompleted: () {
+          setState(() {
+            _hoveringIndex = null;
+          });
+        },
+        onDraggableCanceled: (_, __) {
+          setState(() {
+            _hoveringIndex = null;
+          });
+        },
+        child: DragTarget<int>(
+          onAcceptWithDetails: (details) {
+            /// seting old and new index
+            /// Index or data value changes when we select or drag the Icon
+            setState(() {
+              final oldIndex = details.data;
+              if (oldIndex != index) {
+                final item = _items.removeAt(oldIndex);
+                _items.insert(index > oldIndex ? index - 1 : index, item);
+              }
+              _hoveringIndex = null;
+            });
+          },
+          onWillAcceptWithDetails: (details) {
+            setState(() {
+              _hoveringIndex = index;
+            });
+            return true;
+          },
+          onLeave: (_) {
+            setState(() {
+              _hoveringIndex = null;
+            });
+          },
+          builder: (context, candidateData, rejectedData) {
+            final isHovering = _hoveringIndex == index;
+            final double gapPadding = isHovering ? 32.0 : 0.0;
+
+            /// Setting Animation Padding to create the gap between two icons
+            return AnimatedPadding(
+              padding: EdgeInsets.only(left: gapPadding),
+              duration: const Duration(milliseconds: 200),
+              child: widget.builder(_items[index]),
+            );
+          },
+        ),
       ),
     );
+  }
+
+  void _startDrag(int index) {
+    _controller.forward();
+
+    setState(() {});
   }
 }
